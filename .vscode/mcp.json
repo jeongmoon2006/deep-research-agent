@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "arxiv": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["./tools/arxiv_server.py"]
+    }
+  }
+}

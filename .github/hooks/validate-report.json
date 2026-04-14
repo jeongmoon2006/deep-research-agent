@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "type": "command",
+        "command": "python .github/hooks/validate_report.py",
+        "timeout": 10
+      }
+    ]
+  }
+}
