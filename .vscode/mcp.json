@@ -4,6 +4,14 @@
       "type": "stdio",
       "command": "python",
       "args": ["./tools/arxiv_server.py"]
+    },
+    "semantic-scholar": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["./tools/semantic_scholar_server.py"],
+      "env": {
+        "SEMANTIC_SCHOLAR_API_KEY": "${env:SEMANTIC_SCHOLAR_API_KEY}"
+      }
     }
   }
 }
