@@ -1,0 +1,12 @@
+.venv
+__pycache__
+*.pyc
+.git
+.env
+reports/
+*.pdf
+*.pptx
+docs/
+.vscode/
+.github/
+create_*.py
