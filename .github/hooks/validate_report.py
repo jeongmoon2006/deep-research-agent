@@ -8,7 +8,60 @@ correlational distinctions are explicitly stated.
 
 Returns JSON to stdout with a systemMessage containing missing items
 so the agent can fix them.
-"""
+"""User invokes "deep-researcher" agent with a topic
+         │
+         ▼
+┌─────────────────────────────────┐
+│  1. SCOPE THE FIELD             │
+│  • Web search for survey papers │
+│  • Identify sub-topics & groups │
+└──────────────┬──────────────────┘
+               ▼
+┌─────────────────────────────────┐
+│  2. BUILD PAPER LIST (~100)     │
+│  • arXiv MCP tool (search)      │
+│  • Web search (Scholar, PubMed) │
+│  • Prioritize by citation/rigor │
+└──────────────┬──────────────────┘
+               ▼
+┌─────────────────────────────────┐
+│  3. READ & EXTRACT              │
+│  • Fetch HTML or PDF per paper  │
+│  • Invoke paper-analysis skill  │
+│    (parse_pdf → extract_cites)  │
+│  • Extract: question, dataset,  │
+│    methods, findings, limits    │
+└──────────────┬──────────────────┘
+               ▼
+┌─────────────────────────────────┐
+│  4. TRACK PROGRESS              │
+│  • Todo list: found/read/synth  │
+│  • Group by sub-topic           │
+└──────────────┬──────────────────┘
+               ▼
+┌─────────────────────────────────┐
+│  5. SYNTHESIZE                  │
+│  • Cross-reference claims       │
+│  • Flag contradictions          │
+│  • Classify causal vs. correl.  │
+└──────────────┬──────────────────┘
+               ▼
+┌─────────────────────────────────┐
+│  6. WRITE REPORT                │
+│  • 6 required sections + refs   │
+│  • Save to reports/<slug>.md    │
+└──────────────┬──────────────────┘
+               ▼
+┌─────────────────────────────────┐
+│  7. POST-TOOL VALIDATION HOOK   │
+│  • validate_report.py fires     │
+│  • Checks: all 6 sections,     │
+│    no empty sections, ≥30%      │
+│    claim sentences cited,       │
+│    causal/correlational labels  │
+│  • Sends fix instructions back  │
+│    if validation fails          │
+└─────────────────────────────────┘
 
 import json
 import re
