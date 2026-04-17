@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deep Research Agent</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+  <style>
+    /* ── Reset & Variables ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f172a;
+      --bg2:       #1e293b;
+      --bg3:       #273549;
+      --divider:   #334155;
+      --text:      #e2e8f0;
+      --muted:     #94a3b8;
+      --accent:    #818cf8;
+      --accent-h:  #6366f1;
+      --green:     #4ade80;
+      --yellow:    #fbbf24;
+      --red:       #f87171;
+      --blue:      #60a5fa;
+    }
+
+    html, body { height: 100%; overflow: hidden; }
+
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    /* ── App Shell ─────────────────────────────────────────────────────── */
+    .app { display: flex; flex-direction: column; height: 100vh; }
+
+    .app-header {
+      flex-shrink: 0;
+      background: var(--bg);
+      border-bottom: 1px solid var(--divider);
+      padding: 10px 20px;
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+    }
+    .app-header h1 { font-size: 17px; font-weight: 700; color: var(--accent); }
+    .app-header span { font-size: 12px; color: var(--muted); }
+
+    .main-layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Left Panel ────────────────────────────────────────────────────── */
+    .left-panel {
+      background: var(--bg2);
+      border-right: 1px solid var(--divider);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Form */
+    .form-card { padding: 14px 16px; border-bottom: 1px solid var(--divider); }
+
+    .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 9px; }
+
+    .field label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+    }
+
+    .field input, .field select {
+      background: var(--bg);
+      border: 1px solid var(--divider);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 7px 10px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .field input:focus, .field select:focus { border-color: var(--accent); }
+
+    .row2 { display: grid; grid-template-columns: 130px 1fr; gap: 8px; }
+
+    .btn-start {
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: background .15s;
+    }
+    .btn-start:hover:not(:disabled) { background: var(--accent-h); }
+    .btn-start:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* Stats bar */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      border-bottom: 1px solid var(--divider);
+      padding: 10px 16px;
+    }
+    .stat { text-align: center; }
+    .stat-val { font-size: 22px; font-weight: 700; color: var(--accent); }
+    .stat-lbl { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+    /* Progress log */
+    .log-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .log-head {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+      padding: 10px 16px 8px;
+      border-bottom: 1px solid var(--divider);
+      flex-shrink: 0;
+    }
+    .log-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 8px;
+      font-family: "Cascadia Code", "Fira Code", monospace;
+      font-size: 11.5px;
+    }
+    .log-entry {
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+      padding: 3px 6px;
+      border-radius: 4px;
+      margin-bottom: 1px;
+      border-left: 2px solid transparent;
+      line-height: 1.45;
+    }
+    .log-entry.status        { border-left-color: var(--muted);   color: var(--muted); }
+    .log-entry.queries       { border-left-color: var(--accent);  color: var(--text); }
+    .log-entry.papers_found  { border-left-color: var(--blue);    color: var(--text); }
+    .log-entry.papers_scored { border-left-color: var(--yellow);  color: var(--text); }
+    .log-entry.synthesis_start { border-left-color: var(--accent); color: var(--text); }
+    .log-entry.warning       { border-left-color: var(--yellow);  color: var(--yellow); }
+    .log-entry.error         { border-left-color: var(--red);     color: var(--red); }
+    .log-entry.done          { border-left-color: var(--green);   color: var(--green); }
+    .log-icon { flex-shrink: 0; }
+    .log-time { flex-shrink: 0; font-size: 10px; color: var(--muted); padding-top: 1px; }
+    .log-msg  { flex: 1; word-break: break-word; }
+
+    /* ── Right Panel (Report) ──────────────────────────────────────────── */
+    .right-panel {
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .report-toolbar {
+      flex-shrink: 0;
+      padding: 8px 20px;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      gap: 8px;
+      background: #f8fafc;
+    }
+
+    .btn-dl {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      color: #1e293b;
+      border-radius: 6px;
+      padding: 5px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .btn-dl:hover { background: #e2e8f0; }
+
+    .report-empty {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #94a3b8;
+      font-size: 15px;
+    }
+
+    .report-scroll { flex: 1; overflow-y: auto; }
+
+    /* ── Markdown / Report Body ────────────────────────────────────────── */
+    .md {
+      padding: 36px 48px;
+      max-width: 860px;
+      color: #1a1a2e;
+      line-height: 1.7;
+    }
+    .md h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; color: #0f172a; }
+    .md h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 32px 0 10px;
+      color: #1e293b;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 5px;
+    }
+    .md h3 { font-size: 15px; font-weight: 600; margin: 18px 0 6px; }
+    .md p  { font-size: 14px; margin-bottom: 10px; }
+    .md ul, .md ol { font-size: 14px; margin: 0 0 10px 20px; }
+    .md li { margin-bottom: 3px; }
+    .md strong { font-weight: 600; }
+    .md em { font-style: italic; }
+    .md code {
+      font-family: monospace;
+      font-size: 12.5px;
+      background: #f1f5f9;
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+    .md blockquote {
+      border-left: 3px solid #6366f1;
+      padding-left: 14px;
+      margin: 10px 0;
+      color: #475569;
+    }
+    .md hr { border: none; border-top: 1px solid #e2e8f0; margin: 22px 0; }
+    .md table { border-collapse: collapse; width: 100%; margin-bottom: 12px; font-size: 13px; }
+    .md th, .md td { border: 1px solid #e2e8f0; padding: 6px 12px; }
+    .md th { background: #f8fafc; font-weight: 600; }
+    .md a { color: #6366f1; text-decoration: none; }
+    .md a:hover { text-decoration: underline; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header class="app-header">
+    <h1>Deep Research Agent</h1>
+    <span>Systematic literature survey · arXiv + Semantic Scholar</span>
+  </header>
+
+  <div class="main-layout">
+
+    <!-- ── Left Panel ───────────────────────────────────────────────── -->
+    <aside class="left-panel">
+
+      <div class="form-card">
+        <form id="form">
+          <div class="field">
+            <label for="topic">Research Topic</label>
+            <input id="topic" type="text"
+              placeholder="e.g. transformer architectures for protein folding"
+              required autocomplete="off" />
+          </div>
+
+          <div class="row2">
+            <div class="field">
+              <label for="provider">Provider</label>
+              <select id="provider">
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="model">Model</label>
+              <input id="model" type="text" value="gpt-4o" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="apikey">API Key</label>
+            <input id="apikey" type="password"
+              placeholder="Paste your key here" required autocomplete="off" />
+          </div>
+
+          <button class="btn-start" id="startBtn" type="submit">
+            Start Research
+          </button>
+        </form>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-bar hidden" id="statsBar">
+        <div class="stat">
+          <div class="stat-val" id="statCandidates">0</div>
+          <div class="stat-lbl">Candidates</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" id="statRanked">0</div>
+          <div class="stat-lbl">Ranked</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" id="statPhase">—</div>
+          <div class="stat-lbl">Phase</div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="log-section hidden" id="logSection">
+        <div class="log-head">Progress</div>
+        <div class="log-body" id="logBody"></div>
+      </div>
+
+    </aside>
+
+    <!-- ── Right Panel ───────────────────────────────────────────────── -->
+    <main class="right-panel">
+
+      <div class="report-toolbar hidden" id="toolbar">
+        <button class="btn-dl hidden" id="dlBtn">⬇ Download .md</button>
+      </div>
+
+      <div class="report-empty" id="emptyState">
+        Enter a research topic on the left and click <strong>Start Research</strong>.
+      </div>
+
+      <div class="report-scroll hidden" id="reportScroll">
+        <div class="md" id="reportContent"></div>
+      </div>
+
+    </main>
+  </div><!-- /main-layout -->
+</div><!-- /app -->
+
+<script>
+  // ── State ────────────────────────────────────────────────────────────────
+  let es = null;          // EventSource
+  let rawReport = "";     // accumulated markdown text
+  let renderTimer = null; // throttle handle
+
+  // ── Model presets ────────────────────────────────────────────────────────
+  document.getElementById("provider").addEventListener("change", function () {
+    const presets = { openai: "gpt-4o", anthropic: "claude-opus-4-5" };
+    document.getElementById("model").value = presets[this.value] ?? "";
+  });
+
+  // ── Form submit ──────────────────────────────────────────────────────────
+  document.getElementById("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const topic   = document.getElementById("topic").value.trim();
+    const provider = document.getElementById("provider").value;
+    const model   = document.getElementById("model").value.trim();
+    const apiKey  = document.getElementById("apikey").value.trim();
+
+    if (!topic || !model || !apiKey) return;
+
+    // Close any existing stream
+    if (es) { es.close(); es = null; }
+
+    // Reset UI
+    rawReport = "";
+    document.getElementById("reportContent").innerHTML = "";
+    document.getElementById("logBody").innerHTML = "";
+    setVisible("statsBar", true);
+    setVisible("logSection", true);
+    setVisible("toolbar", true);
+    setVisible("emptyState", false);
+    setVisible("reportScroll", true);
+    setVisible("dlBtn", false);
+    setStat("statCandidates", 0);
+    setStat("statRanked", 0);
+    setStat("statPhase", "…");
+    setFormEnabled(false);
+
+    // Start job
+    let jobId;
+    try {
+      const resp = await fetch("/api/research/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic, provider, model, api_key: apiKey }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        addLog("error", err.detail ?? "Failed to start job");
+        setFormEnabled(true);
+        return;
+      }
+      ({ job_id: jobId } = await resp.json());
+    } catch (err) {
+      addLog("error", `Network error: ${err.message}`);
+      setFormEnabled(true);
+      return;
+    }
+
+    // Open SSE stream
+    es = new EventSource(`/api/research/${encodeURIComponent(jobId)}/stream`);
+
+    es.onmessage = (event) => {
+      let data;
+      try { data = JSON.parse(event.data); } catch { return; }
+      handleEvent(data);
+    };
+
+    es.onerror = () => {
+      addLog("error", "Connection lost — check the server.");
+      es.close(); es = null;
+      setFormEnabled(true);
+    };
+  });
+
+  // ── Event handler ────────────────────────────────────────────────────────
+  function handleEvent(d) {
+    switch (d.type) {
+
+      case "status":
+        addLog("status", d.message);
+        setStat("statPhase", phaseLabel(d.message));
+        break;
+
+      case "queries":
+        addLog("queries", "🔍 Queries: " + d.queries.join(" · "));
+        break;
+
+      case "papers_found":
+        addLog("papers_found",
+          `📄 [${d.source}] +${d.new} papers (${d.total} total) — "${d.query}"`);
+        setStat("statCandidates", d.total);
+        break;
+
+      case "papers_scored":
+        addLog("papers_scored",
+          `⭐ Ranked ${d.total} → kept top ${d.kept} | Best: "${shorten(d.top_paper, 60)}"`);
+        setStat("statRanked", d.kept);
+        setStat("statPhase", "Synthesizing");
+        break;
+
+      case "synthesis_start":
+        addLog("synthesis_start", "🧠 Synthesizing report…");
+        break;
+
+      case "report_chunk":
+        rawReport += d.text;
+        scheduleRender();
+        break;
+
+      case "warning":
+        addLog("warning", "⚠ " + d.message);
+        break;
+
+      case "error":
+        addLog("error", "✖ " + d.message);
+        setStat("statPhase", "Error");
+        es?.close(); es = null;
+        setFormEnabled(true);
+        break;
+
+      case "done":
+        // Final render
+        if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
+        renderReport();
+        addLog("done", "✓ " + d.message);
+        setStat("statPhase", "Done");
+        setVisible("dlBtn", true);
+        es?.close(); es = null;
+        setFormEnabled(true);
+        break;
+
+      case "stream_end":
+        es?.close(); es = null;
+        break;
+    }
+  }
+
+  // ── Markdown rendering (throttled to 200 ms) ─────────────────────────────
+  function scheduleRender() {
+    if (renderTimer) return;
+    renderTimer = setTimeout(() => {
+      renderReport();
+      renderTimer = null;
+    }, 200);
+  }
+
+  function renderReport() {
+    document.getElementById("reportContent").innerHTML =
+      marked.parse(rawReport);
+  }
+
+  // ── Download ─────────────────────────────────────────────────────────────
+  document.getElementById("dlBtn").addEventListener("click", () => {
+    const topic = document.getElementById("topic").value.trim();
+    const slug  = topic.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const blob  = new Blob([rawReport], { type: "text/markdown" });
+    const url   = URL.createObjectURL(blob);
+    const a     = Object.assign(document.createElement("a"),
+                    { href: url, download: `${slug}.md` });
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const ICONS = {
+    status: "·", queries: "🔍", papers_found: "📄",
+    papers_scored: "⭐", synthesis_start: "🧠",
+    warning: "⚠", error: "✖", done: "✓",
+  };
+
+  function addLog(type, message) {
+    const log = document.getElementById("logBody");
+    const el  = document.createElement("div");
+    el.className = `log-entry ${type}`;
+
+    const t = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    el.innerHTML =
+      `<span class="log-icon">${ICONS[type] ?? "·"}</span>` +
+      `<span class="log-time">${t}</span>` +
+      `<span class="log-msg">${esc(message)}</span>`;
+
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function setVisible(id, show) {
+    document.getElementById(id).classList.toggle("hidden", !show);
+  }
+
+  function setStat(id, val) {
+    document.getElementById(id).textContent = val;
+  }
+
+  function setFormEnabled(on) {
+    const btn   = document.getElementById("startBtn");
+    const topic = document.getElementById("topic");
+    btn.disabled   = !on;
+    topic.disabled = !on;
+    btn.textContent = on ? "Start Research" : "Researching…";
+  }
+
+  function shorten(s, n) {
+    return s && s.length > n ? s.slice(0, n) + "…" : (s ?? "");
+  }
+
+  function phaseLabel(msg) {
+    if (/search/i.test(msg))     return "Searching";
+    if (/scor/i.test(msg))       return "Scoring";
+    if (/synth/i.test(msg))      return "Synthesizing";
+    if (/generat/i.test(msg))    return "Queries";
+    return "Running";
+  }
+</script>
+</body>
+</html>
