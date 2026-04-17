@@ -18,6 +18,7 @@ sys.path.insert(0, str(_TOOLS_DIR))
 from arxiv_server import search_arxiv  # type: ignore[import]
 from semantic_scholar_server import search_semantic_scholar, score_papers  # type: ignore[import]
 
+from .pdf_reader import fetch_paper_texts
 from .providers import complete, stream_completion
 
 # Type alias for the emit callback:  await emit("event_type", key=value, ...)
@@ -88,17 +89,31 @@ async def run_research(
     top_title = top_papers[0].get("title", "") if top_papers else ""
     await emit("papers_scored", total=len(scored), kept=len(top_papers), top_paper=top_title)
 
-    # 4. Synthesize report via LLM (streaming)
+    # 4. Download and read full-text PDFs for top papers
+    await emit("status", message="Downloading full-text PDFs for top papers…")
+
+    async def _pdf_progress(done: int, total: int, title: str) -> None:
+        await emit("status", message=f"Reading PDFs ({done}/{total}): {title[:60]}")
+
+    paper_texts = await fetch_paper_texts(
+        top_papers, max_papers=10, on_progress=_pdf_progress,
+    )
+    pdf_count = len(paper_texts)
+    await emit("status",
+               message=f"Read full text from {pdf_count} papers"
+                       f" (of {min(10, len(top_papers))} attempted)")
+
+    # 5. Synthesize report via LLM (streaming)
     await emit("status", message=f"Synthesizing report from top {len(top_papers)} papers…")
     await emit("synthesis_start")
 
     report_chunks: list[str] = []
-    async for chunk in _synthesize(topic, top_papers, provider, api_key, model, emit):
+    async for chunk in _synthesize(topic, top_papers, paper_texts, provider, api_key, model, emit):
         report_chunks.append(chunk)
 
     report = "".join(report_chunks)
 
-    # 5. Persist report to disk
+    # 6. Persist report to disk
     _REPORTS_DIR.mkdir(exist_ok=True)
     slug = _slugify(topic)
     report_path = _REPORTS_DIR / f"{slug}.md"
@@ -178,6 +193,7 @@ async def _generate_queries(
 async def _synthesize(
     topic: str,
     papers: list[dict],
+    paper_texts: dict[str, str],
     provider: str,
     api_key: str,
     model: str,
@@ -190,6 +206,7 @@ async def _synthesize(
     paper_entries: list[str] = []
     for i, p in enumerate(papers, 1):
         title = p.get("title", "Untitled")
+        norm_title = " ".join(title.lower().split())
 
         raw_authors = p.get("authors") or []
         if isinstance(raw_authors, list):
@@ -209,21 +226,34 @@ async def _synthesize(
         abstract = (p.get("abstract") or "")[:400].strip()
         source = p.get("_source", "")
 
-        paper_entries.append(
+        entry = (
             f"[{i}] **{title}** — {author_str} ({year}) | "
             f"citations: {cites} | score: {score} | source: {source}\n"
             f"    {abstract}"
         )
 
+        # Append full text excerpt if available
+        full_text = paper_texts.get(norm_title)
+        if full_text:
+            entry += f"\n\n    [FULL TEXT EXCERPT]\n    {full_text[:4000]}"
+
+        paper_entries.append(entry)
+
     papers_block = "\n\n".join(paper_entries)
     today = datetime.date.today().isoformat()
+
+    papers_with_text = sum(1 for p in papers
+                           if " ".join(p.get("title", "").lower().split()) in paper_texts)
 
     system = (
         "You are a Deep Researcher — a systematic scientific literature analyst. "
         "Write in precise, academic English. "
         "Cite every factual claim with inline (Author et al., Year) citations. "
         "Explicitly distinguish causal from correlational evidence. "
-        "Never speculate beyond what the provided papers support."
+        "Never speculate beyond what the provided papers support. "
+        f"You have full-text excerpts for {papers_with_text} papers (marked with "
+        "[FULL TEXT EXCERPT]). Use these for deeper analysis — extract specific "
+        "methods, results, and findings rather than relying only on abstracts."
     )
 
     user_message = (
