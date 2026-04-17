@@ -1,154 +1,78 @@
-﻿# Deep Research Agent
+# Deep Research Agent
 
-A systematic scientific literature survey tool powered by LLMs. Give it a research topic and it searches arXiv + Semantic Scholar, scores papers by importance, synthesizes findings across ~100 papers, and produces a structured research report — either as a VS Code agent or a web app.
+AI-powered tool that surveys scientific literature — searches arXiv + Semantic Scholar, ranks ~100 papers by importance, and synthesizes a structured, citation-rich research report.
 
----
+![Deep Research Agent Architecture](docs/architecture.png)
 
 ## Features
 
-- **Multi-source search** — queries both arXiv and Semantic Scholar with LLM-generated search terms
-- **Automatic paper scoring** — ranks candidates by citation count (45%), influential citations (30%), and recency (25%)
-- **Structured 6-section report** — standardized format covering research landscape, data, methods, predictions, causation vs. correlation, and open questions
-- **Causal vs. correlational tagging** — every major finding is explicitly classified
-- **Post-write validation** — a hook checks that all sections are present, citations are dense enough, and causal language is used
-- **Web app UI** — real-time streaming interface, bring-your-own API key, OpenAI or Anthropic
-- **VS Code agent mode** — runs natively inside VS Code via the Agents API
+- **Multi-source search** — arXiv and Semantic Scholar with LLM-generated queries
+- **Paper scoring** — weighted ranking by citations (45%), influential citations (30%), recency (25%)
+- **6-section report** — research landscape, data, methods, predictions, causation vs. correlation, gaps
+- **Real-time streaming** — live progress and report rendering in the web UI
+- **Validation hook** — checks section completeness, citation density, and causal language
+- **Dual deployment** — web app (bring-your-own key) or VS Code agent (MCP + Copilot Chat)
 
----
+## Quick Start
 
-## Project Structure
-
-```
-deep-research-agent/
-├── .github/
-│   ├── agents/
-│   │   └── deep-researcher.agent.md    # VS Code agent definition
-│   ├── hooks/
-│   │   ├── validate-report.json        # PostToolUse hook config
-│   │   └── validate_report.py          # Report quality validator
-│   └── skills/
-│       └── paper-analysis/
-│           ├── SKILL.md                # Paper analysis skill instructions
-│           └── scripts/
-│               ├── parse_pdf.py        # PDF extraction (PyMuPDF)
-│               └── extract_citations.py
-├── tools/
-│   ├── arxiv_server.py                 # arXiv MCP server (stdio JSON-RPC)
-│   └── semantic_scholar_server.py      # Semantic Scholar MCP server + scorer
-├── web_app/
-│   ├── server.py                       # FastAPI app + SSE streaming API
-│   ├── agent.py                        # Research pipeline orchestration
-│   ├── providers.py                    # OpenAI / Anthropic streaming abstraction
-│   └── static/
-│       └── index.html                  # Single-page UI
-├── reports/                            # Generated reports (auto-created)
-├── AGENTS.md                           # Project conventions
-└── requirements.txt
-```
-
----
-
-## Quick Start — Web App
-
-### 1. Install dependencies
+### Web App
 
 ```bash
-python -m venv .venv
-# Windows
-.\.venv\Scripts\activate
-# macOS/Linux
-source .venv/bin/activate
-
 pip install -r requirements.txt
-```
-
-### 2. Run the server
-
-```bash
 uvicorn web_app.server:app --reload
+# Open http://localhost:8000
 ```
 
-Open **http://localhost:8000** in your browser.
+Enter a topic, select provider (OpenAI/Anthropic), paste your API key, and click **Start Research**.
 
-### 3. Use the UI
+### VS Code Agent
 
-1. Enter a research topic (e.g. *"transformer architectures for protein folding"*)
-2. Select your LLM provider (OpenAI or Anthropic) and paste your API key
-3. Click **Start Research**
+1. Open in VS Code 1.99+ with GitHub Copilot Chat
+2. Switch to the **deep-researcher** agent
+3. Type your research topic
 
-The left panel streams live progress — query generation → paper discovery → scoring → synthesis. The right panel renders the report in real-time as the LLM writes it. Download the final `.md` when done.
+### Semantic Scholar API Key (optional)
 
-Reports are also saved automatically to `reports/<slug>.md`.
-
----
-
-## Quick Start — VS Code Agent
-
-1. Open the project in VS Code (1.99+ with GitHub Copilot Chat)
-2. Open Copilot Chat and switch to the **deep-researcher** agent
-3. Type your research topic and press Enter
-
-The agent uses the same arXiv and Semantic Scholar MCP tools. Reports are saved to `reports/`.
-
-### Optional: Semantic Scholar API key
-
-Without a key, requests are rate-limited to 1 req/s. With a key you get 10 req/s.
+Rate limit is 1 req/s without a key, 10 req/s with one. Get a free key at [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api).
 
 ```bash
 # .env (gitignored)
 SEMANTIC_SCHOLAR_API_KEY=your_key_here
 ```
 
-Get a free key at [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api).
-
----
-
-## Report Format
-
-Every generated report has this exact structure:
-
-| Section | Contents |
-|---|---|
-| **1. What Are Researchers Studying?** | Landscape overview, sub-topics, seminal papers |
-| **2. What Data Do They Collect?** | Datasets, sample sizes, measurement methods |
-| **3. How Do They Model It?** | Statistical and ML methods, validation approaches |
-| **4. What Do They Predict?** | Key findings, effect sizes, practical applications |
-| **5. Causation vs. Correlation** | Each major finding classified as Causal / Correlational / Mixed |
-| **6. Unexplored Areas** | Gaps, missing data, unanswered questions |
-| **References** | Full list, alphabetical by first author |
-
----
-
-## Paper Scoring Formula
+## Paper Scoring
 
 $$\text{score} = 0.45 \cdot \frac{\log(1 + c)}{\hat{c}} + 0.30 \cdot \frac{\log(1 + c_{\inf})}{\hat{c}_{\inf}} + 0.25 \cdot \max\!\left(0,\ 1 - \frac{\text{age}}{20}\right)$$
 
-Where:
-- $c$ = citation count of the paper; $\hat{c} = \max_{j \in \text{batch}} \log(1 + c_j)$ (batch normalizer)
-- $c_{\inf}$ = influential citation count; $\hat{c}_{\inf} = \max_{j \in \text{batch}} \log(1 + c_{\inf,j})$ (batch normalizer)
-- age = years since publication (papers with unknown year score 0 for recency)
+- $c$ = citation count; $\hat{c}$ = batch max (log-normalized)
+- $c_{\inf}$ = influential citations; $\hat{c}_{\inf}$ = batch max
+- age = years since publication (>20 yr scores 0)
 
-Seminal pre-2000 papers known from survey literature should be retained manually even if their score is low.
+## Project Structure
 
----
+```
+web_app/
+  server.py          # FastAPI + SSE streaming
+  agent.py           # Research pipeline orchestration
+  providers.py       # OpenAI / Anthropic abstraction
+  static/index.html  # Single-page UI
+tools/
+  arxiv_server.py            # arXiv MCP server
+  semantic_scholar_server.py # Semantic Scholar MCP server
+.github/
+  agents/deep-researcher.agent.md  # VS Code agent definition
+  hooks/validate_report.py         # Post-write quality checks
+  skills/paper-analysis/           # Paper analysis skill + scripts
+```
 
 ## Development
 
 ```bash
-# Run tests
-pytest
-
-# Run tests (verbose)
 pytest tests/ -v
 ```
 
-### Adding a new LLM provider
-
-Implement a new `async def _<name>_stream(...)` generator in `web_app/providers.py` and add it to the `if/elif` chain in `stream_completion`.
-
----
+To add a provider, implement `_<name>_stream()` in `web_app/providers.py` and add it to `stream_completion`.
 
 ## Requirements
 
-- Python 3.11+
-- See `requirements.txt` for pinned packages (`fastapi`, `uvicorn`, `openai`, `anthropic`, `PyMuPDF`, `pytest`)
+Python 3.11+ — see `requirements.txt` for dependencies.

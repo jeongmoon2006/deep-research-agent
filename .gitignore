@@ -62,3 +62,8 @@ desktop.ini
 
 # Generated reports (uncomment to ignore)
 # reports/
+
+# create_pptx.py
+create_pptx.py
+*.pptx
+create_figure.py
